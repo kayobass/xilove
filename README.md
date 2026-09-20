@@ -52,7 +52,7 @@ _Heatmap de atividade por dia-da-semana × hora, no fuso horário do servidor._
 ```mermaid
 flowchart LR
     A["Eventos Discord\non_message · on_member_join/remove"] --> B["Buffers em memória"]
-    B -->|"flush a cada 15s\nINSERT em batch"| C[("PostgreSQL\nmessages_meta · member_traffic · guild_config")]
+    B -->|"flush a cada 15s\nINSERT em batch"| C[("PostgreSQL\nmessages_meta · members_traffic · guilds_config")]
     C --> D["queries/\nmessages · members · config · heatmap · reports"]
     D --> E["Comandos de análise\nreport · top · profile · map · channel · members"]
     D --> F["Digest semanal\ntasks.loop idempotente"]
@@ -72,11 +72,11 @@ flowchart LR
 
 ## 🗄️ Modelo de dados
 
-| Tabela           | Papel                                                                                        |
-| ---------------- | -------------------------------------------------------------------------------------------- |
-| `messages_meta`  | `(guild_id, channel_id, user_id, created_at, char_length)` — fato de mensagem                |
-| `member_traffic` | `(guild_id, user_id, event_type, created_at)` — joins/leaves                                 |
-| `guild_config`   | `(guild_id, timezone, created_at, report_channel_id, digest_enabled, last_weekly_report_at)` |
+| Tabela            | Papel                                                                                        |
+| ----------------- | -------------------------------------------------------------------------------------------- |
+| `messages_meta`   | `(guild_id, channel_id, user_id, created_at, char_length)` — fato de mensagem                |
+| `members_traffic` | `(guild_id, user_id, event_type, created_at)` — joins/leaves                                 |
+| `guilds_config`   | `(guild_id, timezone, created_at, report_channel_id, digest_enabled, last_weekly_report_at)` |
 
 Índices em `(guild_id, created_at)` sustentam todas as janelas temporais.
 DDL completo em [`sql/schema.sql`](sql/schema.sql).
@@ -141,4 +141,4 @@ arquitetura e disponibiliza o schema e trechos ilustrativos. O bot está **ao vi
 
 ---
 
-\*Feito por **[Kayo Araujo](https://github.com/kayobass)\***
+*Feito por **[Kayo Araujo](https://github.com/kayobass)***
