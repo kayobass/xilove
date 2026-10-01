@@ -43,7 +43,7 @@ ao vivo** e pode ser adicionado a qualquer servidor.
 ## 🖼️ Visual
 
 ![Heatmap 7x24](docs/images/heatmap.png)
-_Heatmap de atividade por dia-da-semana × hora, no fuso horário do servidor._
+_Heatmap 7x24 Heatmap de atividade por dia-da-semana × hora do dia, no fuso horário do servidor._
 
 ---
 
@@ -51,35 +51,44 @@ _Heatmap de atividade por dia-da-semana × hora, no fuso horário do servidor._
 
 ```mermaid
 flowchart LR
-    A["Eventos Discord\non_message · on_member_join/remove"] --> B["Buffers em memória"]
-    B -->|"flush a cada 15s\nINSERT em batch"| C[("PostgreSQL\nmessages_meta · members_traffic · guilds_config")]
-    C --> D["queries/\nmessages · members · config · heatmap · reports"]
-    D --> E["Comandos de análise\nreport · top · profile · map · channel · members"]
-    D --> F["Digest semanal\ntasks.loop idempotente"]
+    A["Eventos Discord<br>on_message<br>on_member_join/remove"] --> B["Buffers em memória<br>(listas Python)"]
+    B -->|"flush a cada 15s<br>INSERT em batch via executemany<br>1 transação, N linhas"| C[("PostgreSQL<br>messages_meta<br>members_traffic<br>guilds_config")]
+    C --> D["Queries (<code>database/queries/</code>)<br>messages · members · config · heatmap · reports"]
+    D --> E["Comandos de análise<br>report · top · profile · map · channel · members"]
+    D --> F["Digest semanal<br><code>tasks.loop</code> idempotente"]
     F --> G["Canal configurado pelo admin"]
+
+    style A fill:#2ECC71,stroke:#1a5e3a,color:#fff
+    style B fill:#F39C12,stroke:#7a4c00,color:#fff
+    style C fill:#3498DB,stroke:#1a4d7a,color:#fff
+    style D fill:#9B59B6,stroke:#4a226e,color:#fff
+    style E fill:#1ABC9C,stroke:#0f6b5e,color:#fff
+    style F fill:#E74C3C,stroke:#8a1a0d,color:#fff
+    style G fill:#F1C40F,stroke:#8a7a00,color:#000
 ```
 
 **Princípios:**
 
-- **Ingestão desacoplada da escrita:** eventos vão pra buffers em memória e são
-  gravados em batch a cada 15s (1 transação, N linhas) — não um `INSERT` por mensagem.
-- **Leitura por domínio:** queries organizadas em pacote por tabela, com fachada
-  (`queries/__init__.py`) e orquestração separada (`reports.py`).
-- **Agendamento idempotente:** o digest semanal envia **exatamente 1x por semana por
-  servidor**, mesmo com restarts.
+| Princípio             | Detalhe                                                                                                  |
+| --------------------- | -------------------------------------------------------------------------------------------------------- |
+| **Ingestão async**    | Eventos vão para buffers em memória, flushados a cada 15s em batch transacional. Zero `INSERT` por evento. |
+| **Recovery de falha** | Em erro no flush, o batch é re-inserido **na frente do buffer** - dados não são perdidos.                  |
+| **Leitura por domínio** | Queries organizadas por tabela, com fachada `queries/__init__.py` e orquestração `reports.py`.            |
+| **Idempotência**      | O digest envia **exatamente 1× por semana por servidor**, sobrevive restarts sem duplicar.                 |
+| **Timezone-first**    | Toda agregação usa `AT TIME ZONE`; "semana" e "turno" são do fuso do **servidor**.                         |
 
 ---
 
 ## 🗄️ Modelo de dados
 
-| Tabela            | Papel                                                                                        |
-| ----------------- | -------------------------------------------------------------------------------------------- |
-| `messages_meta`   | `(guild_id, channel_id, user_id, created_at, char_length)` — fato de mensagem                |
-| `members_traffic` | `(guild_id, user_id, event_type, created_at)` — joins/leaves                                 |
-| `guilds_config`   | `(guild_id, timezone, created_at, report_channel_id, digest_enabled, last_weekly_report_at)` |
+| Tabela            | Colunas (resumo)                                                   | Índice                          |
+| ----------------- | ------------------------------------------------------------------ | ------------------------------- |
+| `guilds_config`   | `guild_id` PK, `timezone` NOT NULL, `report_channel_id`, `prefix`, `digest_enabled`, `created_at`, `last_weekly_report_at`, `ignored_channels` (array) | —                               |
+| `messages_meta`   | `id` (auto), `guild_id`, `channel_id`, `user_id`, `created_at` (TIMESTAMPTZ), `char_length` | `(guild_id, created_at)`        |
+| `members_traffic` | `id` (auto), `guild_id`, `user_id`, `event_type` (SMALLINT -1/1), `created_at` (TIMESTAMPTZ) | `(guild_id, created_at)`        |
+| `opt_outs`        | `user_id` PK, `created_at`                                         | —                               |
 
-Índices em `(guild_id, created_at)` sustentam todas as janelas temporais.
-DDL completo em [`sql/schema.sql`](sql/schema.sql).
+DDL completo e idempotente em [`sql/schema.sql`](sql/schema.sql).
 
 ---
 
@@ -111,9 +120,9 @@ a semana e o turno **do servidor**, não do datacenter.
 
 Excertos sanitizados em [`snippets/`](snippets/):
 
-- **`ingestion_flush.py`** — o loop de flush com re-inserção em falha.
-- **`weekly_scheduler.py`** — `compute_weekly_slot` + tick idempotente.
-- **`offset_queries.sql`** — o padrão de janela deslizante (`interval` + `offset`)
+- **`ingestion_flush.py`** - o loop de flush com re-inserção em falha.
+- **`weekly_scheduler.py`** - `compute_weekly_slot` + tick idempotente.
+- **`offset_queries.sql`** - o padrão de janela deslizante (`interval` + `offset`)
   que habilita comparação semana-a-semana sem snapshot:
 
 ```sql
@@ -126,14 +135,23 @@ AND created_at <  DATE_TRUNC('day', (NOW() AT TIME ZONE $2) + INTERVAL '1 day' -
 
 ## 🧰 Stack
 
-`Python 3.14` · `discord.py` · `asyncpg` · `PostgreSQL` · `pandas` · `seaborn` ·
-`matplotlib` · `asyncio.tasks` · `zoneinfo`
+| Categoria       | Tecnologia                                                                 |
+| --------------- | --------------------------------------------------------------------------- |
+| **Linguagem**   | Python 3.12+                                                                |
+| **Framework**   | `discord.py` 2.3+                                                           |
+| **Database**    | PostgreSQL 15+ · `asyncpg` (pool: min=2, max=14)                           |
+| **Data viz**    | `pandas` · `seaborn` · `matplotlib`                                         |
+| **Async**       | `asyncio` (tasks, gather, to_thread, Semaphore)                             |
+| **Timezones**   | `zoneinfo` (IANA)                                                           |
+| **Health check**| `microdot` (HTTP, single-thread)                                            |
+| **Infra**       | Supabase (PostgreSQL como serviço)                                          |
+
 
 ---
 
 ## 🔒 Privacidade & código
 
-O XiloVê **não armazena conteúdo de mensagens** — apenas metadados agregados
+O XiloVê **não armazena conteúdo de mensagens** - apenas metadados agregados
 (contagens, timestamps, comprimento). Servidores removidos têm seus dados apagados
 automaticamente. O código-fonte completo é **privado**; este repositório documenta a
 arquitetura e disponibiliza o schema e trechos ilustrativos. O bot está **ao vivo**:
