@@ -3,10 +3,14 @@
 > Uma camada de observabilidade para servidores Discord: entenda o ritmo, o movimento
 > e as conexões da sua comunidade.
 
-[![python](https://img.shields.io/badge/python-3.11+-3776AB?logo=python&logoColor=white)](#)
-[![discord.py](https://img.shields.io/badge/discord.py-2.x-5865F2?logo=discord&logoColor=white)](#)
-[![postgres](https://img.shields.io/badge/postgresql-15+-336791?logo=postgresql&logoColor=white)](#)
-[![status](https://img.shields.io/badge/status-ao_vivo-2ecc71)](#)
+[![python](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![discord.py](https://img.shields.io/badge/discord.py-2.7+-5865F2?logo=discord&logoColor=white)](https://discordpy.readthedocs.io/)
+[![asyncpg](https://img.shields.io/badge/asyncpg-0.31+-A1C767?logo=postgresql&logoColor=white)](https://github.com/MagicStack/asyncpg)
+[![postgres](https://img.shields.io/badge/postgresql-15+-336791?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![pandas](https://img.shields.io/badge/pandas-3.0+-150459?logo=pandas&logoColor=white)](https://pandas.pydata.org/)
+[![seaborn](https://img.shields.io/badge/seaborn-0.13+-2E86AB?logo=python&logoColor=white)](https://seaborn.pydata.org/)
+[![status](https://img.shields.io/badge/status-ao_vivo-2ecc71)](#features)
+[![license](https://img.shields.io/badge/license-MIT-333333?logo=opensourceinitiative&logoColor=white)](LICENSE)
 
 **[🔗 Adicionar ao seu servidor](https://discord.com/oauth2/authorize?client_id=1501777296950825121&permissions=4506247475616960&integration_type=0&scope=bot)**
 
